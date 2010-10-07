@@ -154,7 +154,7 @@ class Buildr::Project
 end
 
 VERSION_NUMBER = '1.0.0'
-GROUP = 'bc'
+GROUP = 'com.github.sonyandy'
 COPYRIGHT = ''
 
 repositories.remote << 'http://www.ibiblio.org/maven2'
@@ -180,4 +180,6 @@ define 'bc' do
   project.version = VERSION_NUMBER
   project.group = GROUP
   manifest['Implementation-Vendor'] = COPYRIGHT
+
+  package :jar
 end
