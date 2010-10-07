@@ -6,7 +6,9 @@ import java.util.Comparator
 import java.security.AccessController.doPrivileged
 import java.security.PrivilegedAction
 
-import scala.collection.mutable.ArrayBuffer
+import scala.collection.Iterable
+import scala.collection.mutable.{ArrayBuffer, WrappedArray}
+import scala.util.control.ControlThrowable
 
 import org.objectweb.asm
 import asm.{ClassVisitor,
@@ -20,44 +22,81 @@ import asm.commons.EmptyVisitor
 object BC {
   import BC._
 
-  private[BC] sealed trait Type {
-    def desc(builder: StringBuilder)
+  private[BC] sealed trait Descriptor {
+
+    def appendTo(descriptor: StringBuilder)
   }
   
-  private[BC] sealed trait ReturnType extends Type
-  private[BC] sealed trait ParameterType extends Type
-  
-  private[BC] object Void extends ReturnType {
-    def desc(builder: StringBuilder) {
-      builder.append('V')
-    }
+  private[BC] sealed trait ReturnDescriptor extends Descriptor
+
+  private[BC] sealed trait ParameterDescriptor extends Descriptor
+
+  private[BC] object VoidDescriptor extends ReturnDescriptor {
+
+    final def appendTo(descriptor: StringBuilder) = descriptor.append('V')
   }
 
-  private[BC] object Int extends ParameterType with ReturnType {
-    def desc(builder: StringBuilder) {
-      builder.append('I')
-    }
-  }
+  private[BC] object BooleanDescriptor extends ReturnDescriptor
+                    with ParameterDescriptor {
 
-  final class ObjectType(private[BC] val internalName: String) extends ParameterType with ReturnType {
-    def desc(builder: StringBuilder) {
-      builder.append('L').append(internalName).append(';')
-    }
-  }
-
-  implicit final def class2ObjectType(`class`: Class[_]) = {
-    new ObjectType(getInternalName(`class`))
-  }
-
-  private[BC] trait NoStackTrace extends Throwable {
-    override def fillInStackTrace(): Throwable = this
+    final def appendTo(descriptor: StringBuilder) = descriptor.append('Z')
   }
   
-  private[BC] final class NameFound extends Throwable with NoStackTrace
+  private[BC] object CharDescriptor extends ReturnDescriptor
+                    with ParameterDescriptor {
+
+    final def appendTo(descriptor: StringBuilder) = descriptor.append('C')
+  }
+  
+  private[BC] object ByteDescriptor extends ReturnDescriptor
+                    with ParameterDescriptor {
+
+    final def appendTo(descriptor: StringBuilder) = descriptor.append('B')
+  }
+
+  private[BC] object ShortDescriptor extends ReturnDescriptor
+                    with ParameterDescriptor {
+
+    final def appendTo(descriptor: StringBuilder) = descriptor.append('S')
+  }
+  
+  private[BC] object IntDescriptor extends ReturnDescriptor
+                    with ParameterDescriptor {
+
+    final def appendTo(descriptor: StringBuilder) = descriptor.append('I')
+  }
+
+  private[BC] object FloatDescriptor extends ReturnDescriptor
+                    with ParameterDescriptor {
+
+    final def appendTo(descriptor: StringBuilder) = descriptor.append('F')
+  }
+
+  private[BC] object LongDescriptor extends ReturnDescriptor
+                    with ParameterDescriptor {
+
+    final def appendTo(descriptor: StringBuilder) = descriptor.append('J')
+  }
+
+  private[BC] object DoubleDescriptor extends ReturnDescriptor
+                    with ParameterDescriptor {
+
+    final def appendTo(descriptor: StringBuilder) = descriptor.append('D')
+  }
+
+  private[BC] final class ObjectDescriptor(private[this] val descriptor: String)
+                    extends ParameterDescriptor {
+
+    final def appendTo(descriptor: StringBuilder) {
+      descriptor.append(this.descriptor)
+    }
+  }
+  
+  private[BC] final class NameFound extends ControlThrowable
 
   private[BC] val nameFoundException = new NameFound
 
-  private[BC] def nameFound { throw nameFoundException }
+  private[BC] def nameFound = throw nameFoundException
   
   private[BC] final class ClassNameVisitor extends EmptyVisitor {
     
@@ -75,6 +114,7 @@ object BC {
   }
   
   private[BC] object LoadClass {
+    
     private[this] val defineClass = classOf[ClassLoader].getDeclaredMethod("defineClass",
                                                                            classOf[String],
                                                                            classOf[Array[Byte]],
@@ -93,125 +133,238 @@ object BC {
       }
     })
 
-    private[BC] final def apply(bc: BC): Class[_] = {
+    private[BC] final def apply[A](bc: BC[A]): Class[A] = {
       val cv = new ClassNameVisitor
-      bc.cv = cv
       val name = try {
-        bc.privateDefineClass()
+        bc.defineClass(cv)
         throw new AssertionError
       } catch {
         case _: NameFound => cv.name
       }
       classLoader.synchronized {
         try {
-          classLoader.loadClass(name)
+          classLoader.loadClass(name).asInstanceOf[Class[A]]
         } catch {
           case _: ClassNotFoundException => {
             val writer = new ClassWriter(COMPUTE_MAXS)
-            bc.cv = writer
-            bc.privateDefineClass()
+            bc.defineClass(writer)
             val b = writer.toByteArray()
             defineClass.invoke(classLoader, name, b, 0.asInstanceOf[AnyRef],
-                               b.length.asInstanceOf[AnyRef]).asInstanceOf[Class[_]]
+                               b.length.asInstanceOf[AnyRef]).asInstanceOf[Class[A]]
           }
-        } 
+        }
       }
     }
   }
+  
+  implicit private[BC] final def loadClass[A] = { bc: BC[A] => LoadClass(bc) }
+  
+  implicit final def bc2Class[A](bc: BC[A]) = bc.findClass
 }
   
-trait BC {
+trait BC[A] {
   import BC._
-
-  type ObjectType = BC.ObjectType
   
   private[BC] var cv: ClassVisitor = null
   private[BC] var mv: MethodVisitor = null
+
+  private[BC] var access: Int = 0
   
-  protected[this] final def `abstract` = new AbstractWord(O.ACC_ABSTRACT)
-  protected[this] final def `final` = new AccessBuilder(O.ACC_FINAL)
-  protected[this] final def `private` = new AccessBuilder(O.ACC_PRIVATE)
-  protected[this] final def `protected` = new AccessBuilder(O.ACC_PROTECTED)
-  protected[this] final def public = new AccessBuilder(O.ACC_PUBLIC)
+  private[BC] final def method(returnDescriptor: ReturnDescriptor,
+                               methodName: String,
+                               parameters: Iterable[ParameterDescriptor],
+                               body: () => Unit) {
+    val descriptor = new StringBuilder
+    descriptor.append('(')
+    parameters.foreach(_.appendTo(descriptor))
+    descriptor.append(')')
+    returnDescriptor.appendTo(descriptor)
+    mv = cv.visitMethod(access, methodName, descriptor.toString, null, null)
+    mv.visitCode()
+    body()
+    mv.visitMaxs(0, 0)
+    mv.visitEnd()
+    mv = null
+  } 
 
-  protected[this] final def `class`(name: String) = new ClassName(name)
-
-  protected[this] final def void(name: String) = new MethodDeclarationBuilder(0, Void, name)
-  protected[this] final def int(name: String) = new MethodDeclarationBuilder(0, Int, name)
+  protected[this] def `final` = {
+    access = O.ACC_FINAL
+    Final
+  }
   
-  protected[this] def int = Int
+  protected[this] def public = {
+    access = O.ACC_PUBLIC
+    Public
+  }
 
-  private[BC] final class AccessBuilder(private var opcode: Int) {
-    def `abstract` = { opcode |= O.ACC_ABSTRACT; this }
-    def `final` = { opcode |= O.ACC_FINAL; this }
-    def `private` = { opcode |= O.ACC_PRIVATE; this }
-    def `protected` = { opcode |= O.ACC_PROTECTED; this }
-    def public = { opcode |= O.ACC_PUBLIC; this }
+  protected[this] def `class` = Class
+  
+  protected[this] final def void(methodName: String)(parameters: ParameterDescriptor*)(body: => Unit) {
+    method(VoidDescriptor, methodName, parameters, body _)
+  }
+  
+  protected[this] final def boolean(methodName: String)(parameters: ParameterDescriptor*)(body: => Unit) {
+    method(BooleanDescriptor, methodName, parameters, body _)
+  }
+  
+  protected[this] final def char(methodName: String)(parameters: ParameterDescriptor*)(body: => Unit) {
+    method(CharDescriptor, methodName, parameters, body _)
+  }
+  
+  protected[this] final def byte(methodName: String)(parameters: ParameterDescriptor*)(body: => Unit) {
+    method(ByteDescriptor, methodName, parameters, body _)
+  }
+  
+  protected[this] final def short(methodName: String)(parameters: ParameterDescriptor*)(body: => Unit) {
+    method(ShortDescriptor, methodName, parameters, body _)
+  }
+  
+  protected[this] final def int(methodName: String)(parameters: ParameterDescriptor*)(body: => Unit) {
+    method(IntDescriptor, methodName, parameters, body _)
+  }
+  
+  protected[this] final def float(methodName: String)(parameters: ParameterDescriptor*)(body: => Unit) {
+    method(FloatDescriptor, methodName, parameters, body _)
+  }
+  
+  protected[this] final def long(methodName: String)(parameters: ParameterDescriptor*)(body: => Unit) {
+    method(LongDescriptor, methodName, parameters, body _)
+  }
+  
+  protected[this] final def double(methodName: String)(parameters: ParameterDescriptor*)(body: => Unit) {
+    method(DoubleDescriptor, methodName, parameters, body _)
+  }
 
-    // def `class`(name: String) = new ClassDeclarationBuilder(opcode, name)
-
-    // def void(name: String) = new MethodDeclarationBuilder(opcode, Void, name)
-    // def int(name: String) = new MethodDeclarationBuilder(opcode, Int, name)
-    def apply(name: ClassName): ClassDeclarationBuilder = {
-      new ClassDeclarationBuilder(opcode, name.name)
+  private[BC] sealed trait ClassAccess {
+    
+    final def `class`(internalName: String) = {
+      new AccessClass(internalName)
+    }
+  }
+  
+  private[BC] sealed trait MethodAccess {
+  
+    final def void(methodName: String)(parameters: ParameterDescriptor*)(body: => Unit) {
+      method(VoidDescriptor, methodName, parameters, body _)
+    }
+    
+    final def boolean(methodName: String)(parameters: ParameterDescriptor*)(body: => Unit) {
+      method(BooleanDescriptor, methodName, parameters, body _)
+    }
+    
+    final def char(methodName: String)(parameters: ParameterDescriptor*)(body: => Unit) {
+      method(CharDescriptor, methodName, parameters, body _)
+    }
+    
+    final def byte(methodName: String)(parameters: ParameterDescriptor*)(body: => Unit) {
+      method(ByteDescriptor, methodName, parameters, body _)
+    }
+    
+    final def short(methodName: String)(parameters: ParameterDescriptor*)(body: => Unit) {
+      method(ShortDescriptor, methodName, parameters, body _)
+    }
+    
+    final def int(methodName: String)(parameters: ParameterDescriptor*)(body: => Unit) {
+      method(IntDescriptor, methodName, parameters, body _)
+    }
+    
+    final def float(methodName: String)(parameters: ParameterDescriptor*)(body: => Unit) {
+      method(FloatDescriptor, methodName, parameters, body _)
+    }
+    
+    final def long(methodName: String)(parameters: ParameterDescriptor*)(body: => Unit) {
+      method(LongDescriptor, methodName, parameters, body _)
+    }
+    
+    final def double(methodName: String)(parameters: ParameterDescriptor*)(body: => Unit) {
+      method(DoubleDescriptor, methodName, parameters, body _)
     }
   }
 
-  private[BC] final class ResultOfClassWordApplication(val name: String)
-  
-  private[BC] final class ClassDeclarationBuilder(private val access: Int,
-                                                  private val name: String) {
-    private[this] var superName = "java/lang/Object"
-    private[this] val interfaces = new ArrayBuffer[String]
+  private[BC] object Final extends ClassAccess with MethodAccess {
 
-    final def `extends`(superType: ObjectType) {
-      superName = superType.internalName
+    final def public = {
+      access |= O.ACC_PUBLIC
+      PublicFinal
     }
+  }
   
-    final def implements(interfaceTypes: ObjectType*) = {
-      for (interfaceType <- interfaceTypes) {
-        interfaces.append(interfaceType.internalName)
-      }
-      this
+  private[BC] object Public extends ClassAccess with MethodAccess {
+
+    final def `final` = {
+      access |= O.ACC_FINAL
+      PublicFinal
     }
-      
+  }
+  
+  private[BC] object Class extends ClassAccess
+
+  private[BC] object PublicFinal extends ClassAccess with MethodAccess
+
+  private[BC] abstract sealed class CanHaveClassBody(protected[this] val internalName: String,
+                                                     protected[this] val superName: String,
+                                                     protected[this] val interfaces: Array[String]) {
+
     final def apply(body: => Unit) {
-      cv.visit(O.V1_5, access, name, null, superName, interfaces.toArray)
+      cv.visit(O.V1_5, access, internalName, null, superName, interfaces)
       body
-      cv.visitEnd
+      cv.visitEnd()
       cv = null
     }
   }
+  
+  private[BC] final class AccessClass(internalName: String)
+                    extends CanHaveClassBody(internalName, "java/lang/Object", null) {
 
-  private[BC] final class MethodDeclarationBuilder(private val access: Int,
-                                                   private val returnType: ReturnType,
-                                                   private val name: String) {
-    final def apply(parameterTypes: ParameterType*) = new MethodDeclaration(access, returnType, name, parameterTypes)
-  }
-
-  private[BC] final class MethodDeclaration(private val access: Int,
-                                            private val returnType: ReturnType,
-                                            private val name: String,
-                                            private val parameterTypes: Seq[ParameterType]) {
-    final def apply(body: => Unit) {
-      val desc = new StringBuilder
-      desc.append('(')
-      for (parameterType <- parameterTypes) {
-        parameterType.desc(desc)
-      }
-      desc.append(')')
-      returnType.desc(desc)
-      mv = cv.visitMethod(access, name, desc.toString, null, null)
-      mv.visitCode()
-      body
-      mv.visitMaxs(0, 0)
-      mv.visitEnd()
-      mv = null
+    final def `extends`(superName: String) = {
+      new AccessClassExtends(internalName, superName)
+    }
+  
+    final def implements(head: String, tail: String*) = {
+      val length = tail.size
+      val interfaces = new Array[String](tail.size + 1)
+      interfaces(0) = head
+      Array.copy(tail.asInstanceOf[WrappedArray[String]].array, 0,
+                 interfaces, 1, length)
+      new AccessClassImplements(internalName, interfaces)
     }
   }
 
+  private[BC] final class AccessClassExtends(internalName: String,
+                                             superName: String)
+                    extends CanHaveClassBody(internalName, superName, null) {
+    
+    final def implements(head: String, tail: String*) = {
+      val length = tail.size
+      val interfaces = new Array[String](tail.size + 1)
+      interfaces(0) = head
+      Array.copy(tail.asInstanceOf[WrappedArray[String]].array, 0,
+                 interfaces, 1, length)
+      new AccessClassExtendsImplements(internalName, superName, null)
+    }                    
+  }
+  
+  private[BC] final class AccessClassImplements(internalName: String,
+                                                interfaces: Array[String])
+                    extends CanHaveClassBody(internalName, "java/lang/Object", interfaces) {
+    
+    final def `extends`(superName: String) {
+      new AccessClassExtendsImplements(internalName, superName, interfaces)
+    }
+  }
+  
+  private[BC] final class AccessClassExtendsImplements(internalName: String,
+                                                       superName: String,
+                                                       interfaces: Array[String])
+                    extends CanHaveClassBody(internalName, superName, interfaces)
+
+  implicit protected[this] final def string2ObjectParameterType(descriptor: String) = {
+    new ObjectDescriptor(descriptor)
+  }
+  
   protected[this] final class Label extends asm.Label {
-    def apply() = mv.visitLabel(this)
+    
+    final def apply() = mv.visitLabel(this)
   }
   
   protected[this] final def ALOAD(`var`: Int) = mv.visitVarInsn(O.ALOAD, `var`)      
@@ -238,7 +391,8 @@ trait BC {
   protected[this] final def ISUB = mv.visitInsn(O.ISUB)
   protected[this] final def POP = mv.visitInsn(O.POP)
   protected[this] final def SWAP = mv.visitInsn(O.SWAP)
-protected[this] final def RETURN = mv.visitInsn(O.RETURN)
+  protected[this] final def RETURN = mv.visitInsn(O.RETURN)
+  
   protected[this] def defineClass()
 
   final def defineClass(cv: ClassVisitor) {
@@ -246,11 +400,7 @@ protected[this] final def RETURN = mv.visitInsn(O.RETURN)
     defineClass
   }
   
-  private[BC] def privateDefineClass() = defineClass()
-
-  final def findClass(): Class[_] = {
-    LoadClass(this)
+  final def findClass()(implicit loadClass: BC[A] => Class[A]) = {
+    loadClass(this)
   }
 }
-
-  
