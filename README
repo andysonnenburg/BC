@@ -1,0 +1,31 @@
+ABOUT BC
+========
+
+BC is a simple layer on the ASM bytecode manipulation framework.  It adds zero
+cost type safety to opcode usage, as well as providing a simple and readable
+DSL.
+
+USAGE
+=====
+
+Simply extend com.github.sonyandy.bc.BC and provide and implementation for
+protected[this] defineClass.  For example:
+
+object Example extends BC[AnyRef] {
+  protected[this] defineClass {
+    public.`final`.`class`("Example") {
+      
+      public.void("<init>")() {
+        ALOAD(0)
+        INVOKESPECIAL("java/lang/Object", "<init>", "()V")
+        RETURN
+      }
+
+    }
+  }
+}
+
+val exampleClass = Example
+
+Note that an implicit conversion from BC[A] to Class[A] is provided, using the
+ClassLoader of the current thread to load the class.
