@@ -169,7 +169,7 @@ SPECS = 'org.scala-tools.testing:specs_2.8.0:jar:1.6.5'
 desc 'The BC project'
 define 'bc' do
   compile.options.delete :lint
-  compile.using :deprecation => true, :warnings => true, :optimise => true
+  compile.using :deprecation => true, :warnings => true, :optimise => true, :javac => { :lint => true }, :other => '-unchecked'
   compile.with ASM
   compile.with ASM_COMMONS
 

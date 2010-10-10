@@ -1,5 +1,6 @@
 package com.github.sonyandy.bc
 
+import java.lang.StringBuilder
 import java.lang.Thread.currentThread
 import java.lang.reflect.Method
 import java.util.Comparator
@@ -8,7 +9,6 @@ import java.security.PrivilegedAction
 
 import scala.collection.Iterable
 import scala.collection.mutable.{ArrayBuffer, WrappedArray}
-import scala.util.control.ControlThrowable
 
 import org.objectweb.asm
 import asm.{ClassVisitor,
@@ -17,10 +17,10 @@ import asm.{ClassVisitor,
             Opcodes => O}
 import ClassWriter.COMPUTE_MAXS
 import asm.Type.getInternalName
-import asm.commons.EmptyVisitor
 
 object BC {
   import BC._
+  import LoadClass.apply
 
   private[BC] sealed trait Descriptor {
 
@@ -92,27 +92,6 @@ object BC {
     }
   }
   
-  private[BC] final class NameFound extends ControlThrowable
-
-  private[BC] val nameFoundException = new NameFound
-
-  private[BC] def nameFound = throw nameFoundException
-  
-  private[BC] final class ClassNameVisitor extends EmptyVisitor {
-    
-    private[BC] var name: String = null
-
-    override final def visit(version: Int,
-                             access: Int,
-                             name: String,
-                             signature: String,
-                             superName: String,
-                             interfaces: Array[String]) {
-      this.name = name
-      nameFound
-    }
-  }
-  
   private[BC] object LoadClass {
     
     private[this] val defineClass = classOf[ClassLoader].getDeclaredMethod("defineClass",
@@ -133,7 +112,7 @@ object BC {
       }
     })
 
-    private[BC] final def apply[A](bc: BC[A]): Class[A] = {
+    implicit private[BC] final def apply[A](bc: BC[A]): Class[A] = {
       val cv = new ClassNameVisitor
       val name = try {
         bc.defineClass(cv)
@@ -156,8 +135,6 @@ object BC {
       }
     }
   }
-  
-  implicit private[BC] final def loadClass[A] = { bc: BC[A] => LoadClass(bc) }
   
   implicit final def bc2Class[A](bc: BC[A]) = bc.findClass
 }
@@ -284,7 +261,7 @@ trait BC[A] {
   private[BC] object Final extends ClassAccess with MethodAccess {
 
     final def public = {
-      access |= O.ACC_PUBLIC
+      access = O.ACC_PUBLIC | O.ACC_FINAL
       PublicFinal
     }
   }
@@ -292,7 +269,7 @@ trait BC[A] {
   private[BC] object Public extends ClassAccess with MethodAccess {
 
     final def `final` = {
-      access |= O.ACC_FINAL
+      access = O.ACC_PUBLIC | O.ACC_FINAL
       PublicFinal
     }
   }
@@ -319,7 +296,11 @@ trait BC[A] {
     final def `extends`(superName: String) = {
       new AccessClassExtends(internalName, superName)
     }
-  
+
+    final def implements(interface: String) = {
+      new AccessClassExtendsImplements(internalName, superName, Array(interface))
+    }
+
     final def implements(head: String, tail: String*) = {
       val length = tail.size
       val interfaces = new Array[String](tail.size + 1)
@@ -333,14 +314,18 @@ trait BC[A] {
   private[BC] final class AccessClassExtends(internalName: String,
                                              superName: String)
                     extends CanHaveClassBody(internalName, superName, null) {
-    
+
+    final def implements(interface: String) = {
+      new AccessClassExtendsImplements(internalName, superName, Array(interface))
+    }
+  
     final def implements(head: String, tail: String*) = {
       val length = tail.size
       val interfaces = new Array[String](tail.size + 1)
       interfaces(0) = head
       Array.copy(tail.asInstanceOf[WrappedArray[String]].array, 0,
                  interfaces, 1, length)
-      new AccessClassExtendsImplements(internalName, superName, null)
+      new AccessClassExtendsImplements(internalName, superName, interfaces)
     }                    
   }
   
@@ -370,6 +355,10 @@ trait BC[A] {
   protected[this] final def ALOAD(`var`: Int) = mv.visitVarInsn(O.ALOAD, `var`)      
   protected[this] final def ASTORE(`var`: Int) = mv.visitVarInsn(O.ASTORE, `var`)
   protected[this] final def CHECKCAST(`type`: String) = mv.visitTypeInsn(O.CHECKCAST, `type`)
+  protected[this] final def DCMPG = mv.visitInsn(O.DCMPG)
+  protected[this] final def DCMPL = mv.visitInsn(O.DCMPL)
+  protected[this] final def DLOAD(`var`: Int) = mv.visitVarInsn(O.DLOAD, `var`)
+  protected[this] final def DSTORE(`var`: Int) = mv.visitVarInsn(O.DSTORE, `var`)
   protected[this] final def DUP = mv.visitInsn(O.DUP)
   protected[this] final def DUP2 = mv.visitInsn(O.DUP2)
   protected[this] final def FCMPG = mv.visitInsn(O.FCMPG)
@@ -384,11 +373,16 @@ trait BC[A] {
   protected[this] final def IF_ACMPNE(label: Label) = mv.visitJumpInsn(O.IF_ACMPNE, label)
   protected[this] final def IF_ICMPGE(label: Label) = mv.visitJumpInsn(O.IF_ICMPGE, label)
   protected[this] final def IF_ICMPLE(label: Label) = mv.visitJumpInsn(O.IF_ICMPLE, label)
+  protected[this] final def INEG = mv.visitInsn(O.INEG)
   protected[this] final def INVOKEINTERFACE(owner: String, name: String, desc: String) = mv.visitMethodInsn(O.INVOKEINTERFACE, owner, name, desc)
   protected[this] final def INVOKESPECIAL(owner: String, name: String, desc: String) = mv.visitMethodInsn(O.INVOKESPECIAL, owner, name, desc)
+  protected[this] final def INVOKESTATIC(owner: String, name: String, desc: String) = mv.visitMethodInsn(O.INVOKESTATIC, owner, name, desc)
   protected[this] final def INVOKEVIRTUAL(owner: String, name: String, desc: String) = mv.visitMethodInsn(O.INVOKEVIRTUAL, owner, name, desc)
   protected[this] final def IRETURN = mv.visitInsn(O.IRETURN)
   protected[this] final def ISUB = mv.visitInsn(O.ISUB)
+  protected[this] final def LCMP = mv.visitInsn(O.LCMP)
+  protected[this] final def LLOAD(`var`: Int) = mv.visitVarInsn(O.LLOAD, `var`)
+  protected[this] final def LSTORE(`var`: Int) = mv.visitVarInsn(O.LSTORE, `var`)
   protected[this] final def POP = mv.visitInsn(O.POP)
   protected[this] final def SWAP = mv.visitInsn(O.SWAP)
   protected[this] final def RETURN = mv.visitInsn(O.RETURN)

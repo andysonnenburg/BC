@@ -64,5 +64,23 @@ object BCSpec extends Specification {
       o.compare(new Object, null) must beGreaterThan(0)
       o.compare(null, new Object) must beLessThan(0)
     }
+
+    "create a new class using the 'BCClassLoader'" in {
+      val classLoader = new BCClassLoader
+      object BCClassLoaderTest extends BC[AnyRef] {
+        protected[this] final def defineClass {
+          public.`final`.`class`("BCClassLoaderTest") {
+            public.void("<init>")() {
+              ALOAD(0)
+              INVOKESPECIAL("java/lang/Object", "<init>", "()V")
+              RETURN
+            }
+          }
+        }
+      }
+      val `class` = classLoader.loadClass(BCClassLoaderTest)
+      `class`.getClassLoader mustBe classLoader
+      `class`.getName must beEqual("BCClassLoaderTest")
+    }
   }
 }
