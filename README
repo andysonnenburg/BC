@@ -25,7 +25,7 @@ object Example extends BC[AnyRef] {
   }
 }
 
-val exampleClass = Example
+val exampleClass: Class[AnyRef] = Example
 
 Note that an implicit conversion from BC[A] to Class[A] is provided, using the
 ClassLoader of the current thread to load the class.
