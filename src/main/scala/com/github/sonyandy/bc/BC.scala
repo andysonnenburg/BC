@@ -90,11 +90,14 @@ object BC {
     }
   }
   
-  private[this] val defineClass = classOf[ClassLoader].getDeclaredMethod("defineClass",
-                                                                         classOf[String],
-                                                                         classOf[Array[Byte]],
-                                                                         Integer.TYPE,
-                                                                         Integer.TYPE)
+  private[this] val defineClass = {
+    classOf[ClassLoader].getDeclaredMethod("defineClass",
+                                           classOf[String],
+                                           classOf[Array[Byte]],
+                                           Integer.TYPE,
+                                           Integer.TYPE)
+  }
+  
   doPrivileged(new PrivilegedAction[Void] {
     final def run() = {
       defineClass.setAccessible(true)
@@ -102,7 +105,7 @@ object BC {
     }
   })
   
-  implicit private[BC] final def apply[A](bc: BC[A]): Class[A] = {
+  implicit private[BC] final def loadClass[A](bc: BC[A]): Class[_ <: A] = {
     val cv = new ClassNameVisitor
     val name = try {
       bc.defineClass(cv)
@@ -113,14 +116,14 @@ object BC {
     val classLoader = currentThread.getContextClassLoader
     classLoader.synchronized {
       try {
-        classLoader.loadClass(name).asInstanceOf[Class[A]]
+        classLoader.loadClass(name).asInstanceOf[Class[_ <: A]]
       } catch {
         case _: ClassNotFoundException => {
           val writer = new ClassWriter(COMPUTE_MAXS)
           bc.defineClass(writer)
           val b = writer.toByteArray()
           defineClass.invoke(classLoader, name, b, 0.asInstanceOf[AnyRef],
-                             b.length.asInstanceOf[AnyRef]).asInstanceOf[Class[A]]
+                             b.length.asInstanceOf[AnyRef]).asInstanceOf[Class[_ <: A]]
         }
       }
     }
@@ -391,7 +394,7 @@ trait BC[A] {
     defineClass
   }
   
-  final def findClass()(implicit loadClass: BC[A] => Class[A]) = {
+  final def findClass()(implicit loadClass: BC[A] => Class[_ <: A]) = {
     loadClass(this)
   }
 }

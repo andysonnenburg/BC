@@ -8,7 +8,7 @@ DSL.
 USAGE
 =====
 
-Simply extend com.github.sonyandy.bc.BC and provide and implementation for
+Simply extend com.github.sonyandy.bc.BC and provide an implementation for
 protected[this] defineClass.  For example:
 
 object Example extends BC[AnyRef] {
