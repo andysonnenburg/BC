@@ -149,12 +149,15 @@ trait BC[A] {
     parameters.foreach(_.appendTo(descriptor))
     descriptor.append(')')
     returnDescriptor.appendTo(descriptor)
-    mv = cv.visitMethod(access, methodName, descriptor.toString, null, null)
-    mv.visitCode()
-    body()
-    mv.visitMaxs(0, 0)
-    mv.visitEnd()
-    mv = null
+    try {
+      mv = cv.visitMethod(access, methodName, descriptor.toString, null, null)
+      mv.visitCode()
+      body()
+      mv.visitMaxs(0, 0)
+      mv.visitEnd()
+    } finally {
+      mv = null
+    }
   } 
 
   protected[this] def `final` = {
@@ -276,10 +279,13 @@ trait BC[A] {
                                                      protected[this] val interfaces: Array[String]) {
 
     final def apply(body: => Unit) {
-      cv.visit(O.V1_5, access, internalName, null, superName, interfaces)
-      body
-      cv.visitEnd()
-      cv = null
+      try {
+        cv.visit(O.V1_5, access, internalName, null, superName, interfaces)
+        body
+        cv.visitEnd()
+      } finally {
+        cv = null
+      }
     }
   }
   

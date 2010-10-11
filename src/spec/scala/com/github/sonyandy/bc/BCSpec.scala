@@ -7,7 +7,7 @@ import org.specs._
 
 object BCSpec extends Specification {
   "BC" should {
-    "create a new 'Test' class" in {
+    "create Test class" in {
       object Test extends BC[Comparator[AnyRef]] {
         
         protected[this] def defineClass() {
@@ -48,7 +48,7 @@ object BCSpec extends Specification {
         
       }
 
-      val `class`: Class[Comparator[AnyRef]] = Test
+      val `class`: Class[_ <: Comparator[AnyRef]] = Test
       isPublic(`class`.getModifiers) must beTrue
       isFinal(`class`.getModifiers) must beTrue
       `class`.getName must_== "Test"
@@ -65,20 +65,23 @@ object BCSpec extends Specification {
       o.compare(null, new Object) must beLessThan(0)
     }
 
-    "create a new class using the 'BCClassLoader'" in {
+    "create a new class using the BCClassLoader" in {
       val classLoader = new BCClassLoader
       object BCClassLoaderTest extends BC[AnyRef] {
         protected[this] final def defineClass {
+          
           public.`final`.`class`("BCClassLoaderTest") {
+            
             public.void("<init>")() {
               ALOAD(0)
               INVOKESPECIAL("java/lang/Object", "<init>", "()V")
               RETURN
             }
+            
           }
         }
       }
-      val `class` = classLoader.loadClass(BCClassLoaderTest)
+      val `class`: Class[_] = classLoader.loadClass(BCClassLoaderTest)
       `class`.getClassLoader mustBe classLoader
       `class`.getName must beEqual("BCClassLoaderTest")
     }

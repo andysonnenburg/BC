@@ -7,7 +7,7 @@ final class BCClassLoader(parent: ClassLoader) extends ClassLoader(parent) {
 
   def this() = this(ClassLoader.getSystemClassLoader)
   
-  final def loadClass[A](bc: BC[A]): Class[A] = {
+  final def loadClass[A](bc: BC[A]): Class[_ <: A] = {
     val cv = new ClassNameVisitor
     val name = try {
       bc.defineClass(cv)
@@ -17,13 +17,13 @@ final class BCClassLoader(parent: ClassLoader) extends ClassLoader(parent) {
     }
     synchronized {
       try {
-        loadClass(name).asInstanceOf[Class[A]]
+        loadClass(name).asInstanceOf[Class[_ <: A]]
       } catch {
         case _: ClassNotFoundException => {
           val writer = new ClassWriter(COMPUTE_MAXS)
           bc.defineClass(writer)
           val b = writer.toByteArray()
-          defineClass(name, b, 0, b.length).asInstanceOf[Class[A]]
+          defineClass(name, b, 0, b.length).asInstanceOf[Class[_ <: A]]
         }
       }
     }
