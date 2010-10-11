@@ -15,7 +15,7 @@ final class BCClassLoader(parent: ClassLoader) extends ClassLoader(parent) {
     } catch {
       case _: NameFound => cv.name
     }
-    this.synchronized {
+    synchronized {
       try {
         loadClass(name).asInstanceOf[Class[A]]
       } catch {

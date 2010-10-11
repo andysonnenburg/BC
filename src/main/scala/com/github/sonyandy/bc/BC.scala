@@ -19,8 +19,6 @@ import ClassWriter.COMPUTE_MAXS
 import asm.Type.getInternalName
 
 object BC {
-  import BC._
-  import LoadClass.apply
 
   private[BC] sealed trait Descriptor {
 
@@ -92,45 +90,37 @@ object BC {
     }
   }
   
-  private[BC] object LoadClass {
-    
-    private[this] val defineClass = classOf[ClassLoader].getDeclaredMethod("defineClass",
-                                                                           classOf[String],
-                                                                           classOf[Array[Byte]],
-                                                                           Integer.TYPE,
-                                                                           Integer.TYPE)
-    doPrivileged(new PrivilegedAction[Void] {
-      final def run() = {
-        defineClass.setAccessible(true)
-        null
-      }
-    })
-    
-    private[this] val classLoader = doPrivileged(new PrivilegedAction[ClassLoader] {
-      final def run() = {
-        currentThread.getContextClassLoader
-      }
-    })
-
-    implicit private[BC] final def apply[A](bc: BC[A]): Class[A] = {
-      val cv = new ClassNameVisitor
-      val name = try {
-        bc.defineClass(cv)
-        throw new AssertionError
+  private[this] val defineClass = classOf[ClassLoader].getDeclaredMethod("defineClass",
+                                                                         classOf[String],
+                                                                         classOf[Array[Byte]],
+                                                                         Integer.TYPE,
+                                                                         Integer.TYPE)
+  doPrivileged(new PrivilegedAction[Void] {
+    final def run() = {
+      defineClass.setAccessible(true)
+      null
+    }
+  })
+  
+  implicit private[BC] final def apply[A](bc: BC[A]): Class[A] = {
+    val cv = new ClassNameVisitor
+    val name = try {
+      bc.defineClass(cv)
+      throw new AssertionError
+    } catch {
+      case _: NameFound => cv.name
+    }
+    val classLoader = currentThread.getContextClassLoader
+    classLoader.synchronized {
+      try {
+        classLoader.loadClass(name).asInstanceOf[Class[A]]
       } catch {
-        case _: NameFound => cv.name
-      }
-      classLoader.synchronized {
-        try {
-          classLoader.loadClass(name).asInstanceOf[Class[A]]
-        } catch {
-          case _: ClassNotFoundException => {
-            val writer = new ClassWriter(COMPUTE_MAXS)
-            bc.defineClass(writer)
-            val b = writer.toByteArray()
-            defineClass.invoke(classLoader, name, b, 0.asInstanceOf[AnyRef],
-                               b.length.asInstanceOf[AnyRef]).asInstanceOf[Class[A]]
-          }
+        case _: ClassNotFoundException => {
+          val writer = new ClassWriter(COMPUTE_MAXS)
+          bc.defineClass(writer)
+          val b = writer.toByteArray()
+          defineClass.invoke(classLoader, name, b, 0.asInstanceOf[AnyRef],
+                             b.length.asInstanceOf[AnyRef]).asInstanceOf[Class[A]]
         }
       }
     }
@@ -351,9 +341,16 @@ trait BC[A] {
     
     final def apply() = mv.visitLabel(this)
   }
-  
-  protected[this] final def ALOAD(`var`: Int) = mv.visitVarInsn(O.ALOAD, `var`)      
+
+  protected[this] final def AALOAD = mv.visitInsn(O.AALOAD)
+  protected[this] final def AASTORE = mv.visitInsn(O.AASTORE)
+  protected[this] final def ACONST_NULL = mv.visitInsn(O.ACONST_NULL)
+  protected[this] final def ALOAD(`var`: Int) = mv.visitVarInsn(O.ALOAD, `var`)
+  protected[this] final def ANEWARRAY(`type`: String) = mv.visitTypeInsn(O.ANEWARRAY, `type`)
+  protected[this] final def ARETURN = mv.visitInsn(O.ARETURN)
+  protected[this] final def ARRAYLENGTH = mv.visitInsn(O.ARRAYLENGTH)
   protected[this] final def ASTORE(`var`: Int) = mv.visitVarInsn(O.ASTORE, `var`)
+  protected[this] final def ATHROW = mv.visitInsn(O.ATHROW)
   protected[this] final def CHECKCAST(`type`: String) = mv.visitTypeInsn(O.CHECKCAST, `type`)
   protected[this] final def DCMPG = mv.visitInsn(O.DCMPG)
   protected[this] final def DCMPL = mv.visitInsn(O.DCMPL)
