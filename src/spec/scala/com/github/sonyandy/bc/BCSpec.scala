@@ -7,70 +7,167 @@ import org.specs._
 
 object BCSpec extends Specification {
   "BC" should {
-    "create Test class" in {
-      object Test extends BC[Comparator[AnyRef]] {
+    "create Simple1 class" in {
+      object Simple1 extends BC[AnyRef] {
         
         protected[this] def defineClass() {
           
-          public.`final`.`class`("Test").implements("java/util/Comparator") {
+          public.`class`("Simple1") {
             
             public.void("<init>")() {
               ALOAD(0)
               INVOKESPECIAL("java/lang/Object", "<init>", "()V")
               RETURN
             }
-
-            public.`final`.int("compare")("Ljava/lang/Object;", "Ljava/lang/Object;") {
-              ALOAD(1)
-              ALOAD(2)
-              val L1 = new Label
-              IF_ACMPNE(L1)
-              ICONST_0
-              IRETURN
-              L1()
-              ALOAD(1)
-              val L2 = new Label
-              IFNONNULL(L2)
-              ICONST_M1
-              IRETURN
-              L2()
-              ALOAD(2)
-              val L3 = new Label
-              IFNONNULL(L3)
-              ICONST_1
-              IRETURN
-              L3()
-              ICONST_0
-              IRETURN
-            }
           }
         }
         
       }
 
-      val `class`: Class[_ <: Comparator[AnyRef]] = Test
+      val `class`: Class[_ <: AnyRef] = Simple1
       isPublic(`class`.getModifiers) must beTrue
-      isFinal(`class`.getModifiers) must beTrue
-      `class`.getName must_== "Test"
-      val c = `class`.getDeclaredConstructor()
-      isPublic(c.getModifiers) must beTrue
-      val m = `class`.getDeclaredMethod("compare", classOf[Object], classOf[Object])
-      isPublic(m.getModifiers) must beTrue
-      isFinal(m.getModifiers) must beTrue
-      isStatic(m.getModifiers) must beFalse
-      (m.getReturnType eq java.lang.Integer.TYPE) must beTrue
-      val o = `class`.newInstance
-      o.compare(null, null) must_== 0
-      o.compare(new Object, null) must beGreaterThan(0)
-      o.compare(null, new Object) must beLessThan(0)
+      isFinal(`class`.getModifiers) must beFalse
+      `class`.getName must_== "Simple1"
+      val constructor = `class`.getDeclaredConstructor()
+      isPublic(constructor.getModifiers) must beTrue
+      `class`.newInstance()
     }
 
+    "create Simple2 class with basic methods" in {
+      object Simple2 extends BC[AnyRef] {
+
+        protected[this] def defineClass() {
+
+          public.`class`("Simple2") {
+
+            public.void("<init>")() {
+              ALOAD(0)
+              INVOKESPECIAL("java/lang/Object", "<init>", "()V")
+              RETURN
+            }
+
+            public.boolean("equals")("Ljava/lang/Object;") {
+              ALOAD(1)
+              INSTANCEOF("Simple2")
+              val ISINSTANCEOF = new Label
+              IFNE(ISINSTANCEOF)
+              ICONST_0
+              IRETURN
+              ISINSTANCEOF()
+              ICONST_1
+              IRETURN
+            }
+          }
+        }
+      }
+
+      val `class`: Class[_ <: AnyRef] = Simple2
+      isPublic(`class`.getModifiers) must beTrue
+      isFinal(`class`.getModifiers) must beFalse
+      `class`.getName must_== "Simple2"
+      val constructor = `class`.getDeclaredConstructor()
+      isPublic(constructor.getModifiers) must beTrue
+      val method = `class`.getMethod("equals", classOf[Object])
+      isPublic(method.getModifiers) must beTrue
+      isFinal(method.getModifiers) must beFalse
+      val o = `class`.newInstance()
+      o must be_==(o)
+      o must not(be_==(new AnyRef))
+      o must be_==(`class`.newInstance())
+    }
+
+    "create Simple3 class with final methods" in {
+      object Simple3 extends BC[AnyRef] {
+
+        protected[this] def defineClass() {
+
+          public.`class`("Simple3") {
+
+            public.void("<init>")() {
+              ALOAD(0)
+              INVOKESPECIAL("java/lang/Object", "<init>", "()V")
+              RETURN
+            }
+
+            public.`final`.boolean("equals")("Ljava/lang/Object;") {
+              ALOAD(1)
+              INSTANCEOF("Simple3")
+              val ISINSTANCEOF = new Label
+              IFNE(ISINSTANCEOF)
+              ICONST_0
+              IRETURN
+              ISINSTANCEOF()
+              ICONST_1
+              IRETURN
+            }
+          }
+        }
+      }
+
+      val `class`: Class[_ <: AnyRef] = Simple3
+      isPublic(`class`.getModifiers) must beTrue
+      isFinal(`class`.getModifiers) must beFalse
+      `class`.getName must_== "Simple3"
+      val constructor = `class`.getDeclaredConstructor()
+      isPublic(constructor.getModifiers) must beTrue
+      val method = `class`.getMethod("equals", classOf[Object])
+      isPublic(method.getModifiers) must beTrue
+      isFinal(method.getModifiers) must beTrue
+      val o = `class`.newInstance()
+      o must be_==(o)
+      o must not(be_==(new AnyRef))
+      o must be_==(`class`.newInstance())
+    }
+
+    "create final Simple4 class with non-final methods" in {
+      object Simple4 extends BC[AnyRef] {
+
+        protected[this] def defineClass() {
+
+          public.`final`.`class`("Simple4") {
+
+            public.void("<init>")() {
+              ALOAD(0)
+              INVOKESPECIAL("java/lang/Object", "<init>", "()V")
+              RETURN
+            }
+
+            public.boolean("equals")("Ljava/lang/Object;") {
+              ALOAD(1)
+              INSTANCEOF("Simple4")
+              val ISINSTANCEOF = new Label
+              IFNE(ISINSTANCEOF)
+              ICONST_0
+              IRETURN
+              ISINSTANCEOF()
+              ICONST_1
+              IRETURN
+            }
+          }
+        }
+      }
+
+      val `class`: Class[_ <: AnyRef] = Simple4
+      isPublic(`class`.getModifiers) must beTrue
+      isFinal(`class`.getModifiers) must beTrue
+      `class`.getName must_== "Simple4"
+      val constructor = `class`.getDeclaredConstructor()
+      isPublic(constructor.getModifiers) must beTrue
+      val method = `class`.getMethod("equals", classOf[Object])
+      isPublic(method.getModifiers) must beTrue
+      isFinal(method.getModifiers) must beFalse
+      val o = `class`.newInstance()
+      o must be_==(o)
+      o must not(be_==(new AnyRef))
+      o must be_==(`class`.newInstance())
+    }
+  
     "create a new class using the BCClassLoader" in {
       val classLoader = new BCClassLoader
       object BCClassLoaderTest extends BC[AnyRef] {
         protected[this] final def defineClass {
           
-          public.`final`.`class`("BCClassLoaderTest") {
+          public.`class`("BCClassLoaderTest") {
             
             public.void("<init>")() {
               ALOAD(0)
@@ -81,9 +178,15 @@ object BCSpec extends Specification {
           }
         }
       }
+
       val `class`: Class[_] = classLoader.loadClass(BCClassLoaderTest)
       `class`.getClassLoader mustBe classLoader
       `class`.getName must beEqual("BCClassLoaderTest")
+      isPublic(`class`.getModifiers) must beTrue
+      isFinal(`class`.getModifiers) must beFalse
+      val constructor = `class`.getDeclaredConstructor()
+      isPublic(constructor.getModifiers) must beTrue
+      `class`.newInstance()
     }
   }
 }

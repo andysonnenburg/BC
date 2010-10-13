@@ -20,6 +20,61 @@ import asm.Type.getInternalName
 
 object BC {
 
+  private[BC] sealed trait ClassAccess {
+
+    def `class`(internalName: String): AccessClass
+  }
+
+  private[BC] sealed trait MethodAccess {
+    
+    def void(methodName: String)(parameters: ParameterDescriptor*)(body: => Unit)
+    def boolean(methodName: String)(parameters: ParameterDescriptor*)(body: => Unit)
+    def char(methodName: String)(parameters: ParameterDescriptor*)(body: => Unit)
+    def byte(methodName: String)(parameters: ParameterDescriptor*)(body: => Unit) 
+    def short(methodName: String)(parameters: ParameterDescriptor*)(body: => Unit)
+    def int(methodName: String)(parameters: ParameterDescriptor*)(body: => Unit)
+    def float(methodName: String)(parameters: ParameterDescriptor*)(body: => Unit)
+    def long(methodName: String)(parameters: ParameterDescriptor*)(body: => Unit)
+    def double(methodName: String)(parameters: ParameterDescriptor*)(body: => Unit)
+  }
+  
+  private[BC] sealed trait Public extends ClassAccess with MethodAccess {
+
+    def `final`: PublicFinal
+  }
+  
+  private[BC] sealed trait Final extends ClassAccess with MethodAccess {
+
+    def public: PublicFinal
+  }
+
+  private[BC] sealed trait PublicFinal extends ClassAccess with MethodAccess
+
+  private[BC] sealed trait CanHaveClassBody {
+
+    def apply(body: => Unit)
+  }
+  
+  private[BC] sealed trait AccessClass extends CanHaveClassBody {
+    
+    def `extends`(superName: String): AccessClassExtends
+    def implements(interface: String): AccessClassImplements
+    def implements(head: String, tail: String*): AccessClassImplements
+  }
+
+  private[BC] sealed trait AccessClassExtends extends CanHaveClassBody {
+    
+    def implements(interface: String): AccessClassExtendsImplements
+    def implements(head: String, tail: String*): AccessClassExtendsImplements
+  }
+
+  private[BC] sealed trait AccessClassImplements extends CanHaveClassBody {
+
+    def `extends`(superName: String): AccessClassExtendsImplements
+  }
+
+  private[BC] sealed trait AccessClassExtendsImplements extends CanHaveClassBody
+  
   private[BC] sealed trait Descriptor {
 
     def appendTo(descriptor: StringBuilder)
@@ -160,17 +215,20 @@ trait BC[A] {
     }
   } 
 
-  protected[this] def `final` = {
+  protected[this] def `final`: Final = {
     access = O.ACC_FINAL
-    Final
+    Builder
   }
   
-  protected[this] def public = {
+  protected[this] def public: Public = {
     access = O.ACC_PUBLIC
-    Public
+    Builder
   }
 
-  protected[this] def `class` = Class
+  protected[this] def `class`(internalName: String): AccessClass = {
+    access = 0
+    Builder.`class`(internalName)
+  }
   
   protected[this] final def void(methodName: String)(parameters: ParameterDescriptor*)(body: => Unit) {
     method(VoidDescriptor, methodName, parameters, body _)
@@ -207,16 +265,28 @@ trait BC[A] {
   protected[this] final def double(methodName: String)(parameters: ParameterDescriptor*)(body: => Unit) {
     method(DoubleDescriptor, methodName, parameters, body _)
   }
+  
+  private[BC] object Builder
+    extends ClassAccess
+    with MethodAccess
+    with Public
+    with Final
+    with PublicFinal
+    with CanHaveClassBody
+    with AccessClass
+    with AccessClassExtends
+    with AccessClassImplements
+    with AccessClassExtendsImplements {
 
-  private[BC] sealed trait ClassAccess {
-    
+    private[this] var internalName: String = null
+    private[this] var superName: String = "java/lang/Object"
+    private[this] var interfaces: Array[String] = null
+  
     final def `class`(internalName: String) = {
-      new AccessClass(internalName)
+      this.internalName = internalName
+      this
     }
-  }
-  
-  private[BC] sealed trait MethodAccess {
-  
+
     final def void(methodName: String)(parameters: ParameterDescriptor*)(body: => Unit) {
       method(VoidDescriptor, methodName, parameters, body _)
     }
@@ -252,31 +322,16 @@ trait BC[A] {
     final def double(methodName: String)(parameters: ParameterDescriptor*)(body: => Unit) {
       method(DoubleDescriptor, methodName, parameters, body _)
     }
-  }
-
-  private[BC] object Final extends ClassAccess with MethodAccess {
-
+    
     final def public = {
-      access = O.ACC_PUBLIC | O.ACC_FINAL
-      PublicFinal
+      access |= O.ACC_FINAL
+      this
     }
-  }
-  
-  private[BC] object Public extends ClassAccess with MethodAccess {
 
     final def `final` = {
-      access = O.ACC_PUBLIC | O.ACC_FINAL
-      PublicFinal
+      access |= O.ACC_FINAL
+      this
     }
-  }
-  
-  private[BC] object Class extends ClassAccess
-
-  private[BC] object PublicFinal extends ClassAccess with MethodAccess
-
-  private[BC] abstract sealed class CanHaveClassBody(protected[this] val internalName: String,
-                                                     protected[this] val superName: String,
-                                                     protected[this] val interfaces: Array[String]) {
 
     final def apply(body: => Unit) {
       try {
@@ -287,17 +342,15 @@ trait BC[A] {
         cv = null
       }
     }
-  }
-  
-  private[BC] final class AccessClass(internalName: String)
-                    extends CanHaveClassBody(internalName, "java/lang/Object", null) {
 
     final def `extends`(superName: String) = {
-      new AccessClassExtends(internalName, superName)
+      this.superName = superName
+      this
     }
 
     final def implements(interface: String) = {
-      new AccessClassExtendsImplements(internalName, superName, Array(interface))
+      interfaces = Array(interface)
+      this
     }
 
     final def implements(head: String, tail: String*) = {
@@ -306,41 +359,11 @@ trait BC[A] {
       interfaces(0) = head
       Array.copy(tail.asInstanceOf[WrappedArray[String]].array, 0,
                  interfaces, 1, length)
-      new AccessClassImplements(internalName, interfaces)
+      this.interfaces = interfaces
+      this
     }
-  }
 
-  private[BC] final class AccessClassExtends(internalName: String,
-                                             superName: String)
-                    extends CanHaveClassBody(internalName, superName, null) {
-
-    final def implements(interface: String) = {
-      new AccessClassExtendsImplements(internalName, superName, Array(interface))
-    }
-  
-    final def implements(head: String, tail: String*) = {
-      val length = tail.size
-      val interfaces = new Array[String](tail.size + 1)
-      interfaces(0) = head
-      Array.copy(tail.asInstanceOf[WrappedArray[String]].array, 0,
-                 interfaces, 1, length)
-      new AccessClassExtendsImplements(internalName, superName, interfaces)
-    }                    
   }
-  
-  private[BC] final class AccessClassImplements(internalName: String,
-                                                interfaces: Array[String])
-                    extends CanHaveClassBody(internalName, "java/lang/Object", interfaces) {
-    
-    final def `extends`(superName: String) {
-      new AccessClassExtendsImplements(internalName, superName, interfaces)
-    }
-  }
-  
-  private[BC] final class AccessClassExtendsImplements(internalName: String,
-                                                       superName: String,
-                                                       interfaces: Array[String])
-                    extends CanHaveClassBody(internalName, superName, interfaces)
 
   implicit protected[this] final def string2ObjectParameterType(descriptor: String) = {
     new ObjectDescriptor(descriptor)
@@ -375,11 +398,13 @@ trait BC[A] {
   protected[this] final def IFEQ(label: Label) = mv.visitJumpInsn(O.IFEQ, label)
   protected[this] final def IFGE(label: Label) = mv.visitJumpInsn(O.IFGE, label)
   protected[this] final def IFLE(label: Label) = mv.visitJumpInsn(O.IFLE, label)
+  protected[this] final def IFNE(label: Label) = mv.visitJumpInsn(O.IFNE, label)
   protected[this] final def IFNONNULL(label: Label) = mv.visitJumpInsn(O.IFNONNULL, label)
   protected[this] final def IF_ACMPNE(label: Label) = mv.visitJumpInsn(O.IF_ACMPNE, label)
   protected[this] final def IF_ICMPGE(label: Label) = mv.visitJumpInsn(O.IF_ICMPGE, label)
   protected[this] final def IF_ICMPLE(label: Label) = mv.visitJumpInsn(O.IF_ICMPLE, label)
   protected[this] final def INEG = mv.visitInsn(O.INEG)
+  protected[this] final def INSTANCEOF(`type`: String) = mv.visitTypeInsn(O.INSTANCEOF, `type`)
   protected[this] final def INVOKEINTERFACE(owner: String, name: String, desc: String) = mv.visitMethodInsn(O.INVOKEINTERFACE, owner, name, desc)
   protected[this] final def INVOKESPECIAL(owner: String, name: String, desc: String) = mv.visitMethodInsn(O.INVOKESPECIAL, owner, name, desc)
   protected[this] final def INVOKESTATIC(owner: String, name: String, desc: String) = mv.visitMethodInsn(O.INVOKESTATIC, owner, name, desc)
