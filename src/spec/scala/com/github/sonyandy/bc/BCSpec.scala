@@ -46,7 +46,7 @@ object BCSpec extends Specification {
               RETURN
             }
 
-            public.boolean("equals")("Ljava/lang/Object;") {
+            public.boolean("equals")(classOf[Object]) {
               ALOAD(1)
               INSTANCEOF("Simple2")
               val ISINSTANCEOF = new Label
@@ -89,7 +89,7 @@ object BCSpec extends Specification {
               RETURN
             }
 
-            public.`final`.boolean("equals")("Ljava/lang/Object;") {
+            public.`final`.boolean("equals")(classOf[Object]) {
               ALOAD(1)
               INSTANCEOF("Simple3")
               val ISINSTANCEOF = new Label
@@ -132,7 +132,7 @@ object BCSpec extends Specification {
               RETURN
             }
 
-            public.boolean("equals")("Ljava/lang/Object;") {
+            public.boolean("equals")(classOf[Object]) {
               ALOAD(1)
               INSTANCEOF("Simple4")
               val ISINSTANCEOF = new Label

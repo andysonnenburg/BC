@@ -3,6 +3,8 @@ package com.github.sonyandy.bc
 import java.lang.StringBuilder
 import java.lang.Thread.currentThread
 import java.lang.reflect.Method
+import java.io.PrintWriter
+import java.io.StringWriter
 import java.util.Comparator
 import java.security.AccessController.doPrivileged
 import java.security.PrivilegedAction
@@ -16,7 +18,8 @@ import asm.{ClassVisitor,
             MethodVisitor,
             Opcodes => O}
 import ClassWriter.COMPUTE_MAXS
-import asm.Type.getInternalName
+import asm.Type.{getDescriptor, getInternalName}
+import asm.util.TraceClassVisitor
 
 object BC {
 
@@ -50,17 +53,19 @@ object BC {
 
   private[BC] sealed trait PublicFinal extends ClassAccess with MethodAccess
 
-  private[BC] sealed trait CanHaveClassBody {
+  private[BC] sealed trait CanHaveBody {
 
     def apply(body: => Unit)
   }
+  
+  private[BC] sealed trait CanHaveClassBody extends CanHaveBody
   
   private[BC] sealed trait AccessClass extends CanHaveClassBody {
     
     def `extends`(superName: String): AccessClassExtends
     def implements(interface: String): AccessClassImplements
     def implements(head: String, tail: String*): AccessClassImplements
-  }
+  }    
 
   private[BC] sealed trait AccessClassExtends extends CanHaveClassBody {
     
@@ -79,6 +84,16 @@ object BC {
 
     def appendTo(descriptor: StringBuilder)
   }
+
+  private[BC] sealed trait CanHaveMethodBody extends CanHaveBody
+  
+  private[BC] sealed trait AccessMethod extends CanHaveMethodBody {
+
+    def throws(exception: ObjectDescriptor): AccessMethodThrows
+    def throws(head: ObjectDescriptor, tail: ObjectDescriptor): AccessMethodThrows
+  }
+
+  private[BC] sealed trait AccessMethodThrows extends CanHaveMethodBody
   
   private[BC] sealed trait ReturnDescriptor extends Descriptor
 
@@ -368,6 +383,10 @@ trait BC[A] {
   implicit protected[this] final def string2ObjectParameterType(descriptor: String) = {
     new ObjectDescriptor(descriptor)
   }
+
+  implicit protected[this] final def class2ObjectParameterType(`class`: Class[_]) = {
+    new ObjectDescriptor(getDescriptor(`class`))
+  }
   
   protected[this] final class Label extends asm.Label {
     
@@ -427,5 +446,13 @@ trait BC[A] {
   
   final def findClass()(implicit loadClass: BC[A] => Class[_ <: A]) = {
     loadClass(this)
+  }
+
+  override def toString = {
+    val sw = new StringWriter
+    val pw = new PrintWriter(sw)
+    val cv = new TraceClassVisitor(pw)
+    defineClass(cv)
+    sw.toString
   }
 }

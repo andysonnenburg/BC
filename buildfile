@@ -160,8 +160,9 @@ COPYRIGHT = ''
 repositories.remote << 'http://www.ibiblio.org/maven2'
 repositories.remote << 'http://scala-tools/repo-releases'
 
-ASM = artifact('asm:asm:jar:3.3').from file('asm/asm/output/dist/lib/asm-3.3.jar')
-ASM_COMMONS = artifact('asm:asm-commons:jar:3.3').from file('asm/asm/output/dist/lib/asm-commons-3.3.jar')
+ASM = 'asm:asm:jar:3.3'
+ASM_COMMONS = 'asm:asm-commons:jar:3.3'
+ASM_UTIL = 'asm:asm-util:jar:3.3'
 
 JUNIT = 'junit:junit:jar:4.8.1'
 SPECS = 'org.scala-tools.testing:specs_2.8.0:jar:1.6.5'
@@ -172,6 +173,7 @@ define 'bc' do
   compile.using :deprecation => true, :warnings => true, :optimise => true, :javac => { :lint => true }, :other => '-unchecked'
   compile.with ASM
   compile.with ASM_COMMONS
+  compile.with ASM_UTIL
 
   test.with JUNIT
   test.with SPECS
