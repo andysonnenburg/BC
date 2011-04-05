@@ -1,7 +1,7 @@
 ABOUT BC
 ========
 
-BC is a simple layer on the ASM bytecode manipulation framework.  It adds zero
+BC is a simple layer on the ASM bytecode manipulation framework.  It adds low
 cost type safety to opcode usage, as well as providing a simple and readable
 DSL.
 

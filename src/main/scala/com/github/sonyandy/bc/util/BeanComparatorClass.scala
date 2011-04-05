@@ -29,7 +29,7 @@ final class BeanComparatorClass[A](private[this] val beanClass: Class[A],
     builder.append("$BeanComparator$$")
     builder.append(beanClass.getName.replace('.', '$'))
     for (field <- fields) {
-      builder.append("$$").append(field.name)
+      builder.append("$$").append(field.name).append("$$")
       if (field.descending) {
         builder.append("D")
       } else {
@@ -50,26 +50,25 @@ final class BeanComparatorClass[A](private[this] val beanClass: Class[A],
   }
 
   private[this] def propertyName(method: Method): Option[String] = {
-    if (isStatic(method.getModifiers) || method.getParameterTypes.length != 0) {
-      None
-    } else {
-      method.getReturnType match {
-        case java.lang.Void.TYPE => None
-        case java.lang.Boolean.TYPE => {
-          val name = method.getName
-          if (!name.startsWith("is")) None
-          else Some(name(2).toLower + name.substring(3))
-        }
-        case _ => {
-          val name = method.getName
-          if (!name.startsWith("get")) None
-          else Some(name(3).toLower + name.substring(4))
-        }
+    (isStatic(method.getModifiers),
+     method.getParameterTypes.length,
+     method.getReturnType) match {
+      case (_, _, java.lang.Void.TYPE) => None
+      case (false, 0, java.lang.Boolean.TYPE) => {
+        val name = method.getName
+        if (!name.startsWith("is")) None
+        else Some(name(2).toLower + name.substring(3))
       }
+      case (false, 0, _) => {
+        val name = method.getName
+        if (!name.startsWith("get")) None
+        else Some(name(3).toLower + name.substring(4))
+      }
+      case _ => None
     }
   }
 
-  protected[this] final def defineClass {
+  protected[this] final def defineClass() {
 
     public.`final`.`class`(comparatorClassName).implements("java/util/Comparator") {
 
@@ -135,159 +134,178 @@ final class BeanComparatorClass[A](private[this] val beanClass: Class[A],
         Type.BOOLEAN
       | Type.BYTE
       | Type.CHAR
-      | Type.SHORT => {
-        ISUB
-        DUP
-        val EQ = new Label
-        IFEQ(EQ)
-        if (descending) {
-          INEG
-        }
-        IRETURN
-        EQ()
-        POP
-      }
-      case Type.INT => {
-        DUP2
-        val LE = new Label
-        IF_ICMPLE(LE)
-        if (descending) {
-          ICONST_M1
-        } else {
-          ICONST_1
-        }
-        IRETURN
-        LE()
-        val GE = new Label
-        IF_ICMPGE(GE)
-        if (descending) {
-          ICONST_1
-        } else {
-          ICONST_M1
-        }
-        IRETURN
-        GE()
-      }
-      case Type.FLOAT => {
-        DUP2
-        FCMPL
-        val LE = new Label
-        IFLE(LE)
-        if (descending) {
-          ICONST_M1
-        } else {
-          ICONST_1
-        }
-        IRETURN
-        LE()
-        FCMPG
-        val GE = new Label
-        IFGE(GE)
-        if (descending) {
-          ICONST_1
-        } else {
-          ICONST_M1
-        }
-        IRETURN
-        GE()
-      }
-      case Type.DOUBLE => {
-        DSTORE(5)
-        DSTORE(3)
-        DLOAD(3)
-        DLOAD(5)
-        DCMPL
-        val LE = new Label
-        IFLE(LE)
-        if (descending) {
-          ICONST_1
-        } else {
-          ICONST_M1
-        }
-        IRETURN
-        LE()
-        DLOAD(3)
-        DLOAD(5)
-        DCMPG
-        val GE = new Label
-        IFGE(GE)
-        if (descending) {
-          ICONST_1
-        } else {
-          ICONST_M1
-        }
-        IRETURN
-        GE()
-      }
-      case Type.LONG => {
-        LSTORE(5)
-        LSTORE(3)
-        LLOAD(3)
-        LLOAD(5)
-        LCMP
-        val LE = new Label
-        IFLE(LE)
-        if (descending) {
-          ICONST_M1
-        } else {
-          ICONST_1
-        }
-        IRETURN
-        LE()
-        LLOAD(3)
-        LLOAD(5)
-        LCMP
-        val GE = new Label
-        IFGE(GE)
-        if (descending) {
-          ICONST_1
-        } else {
-          ICONST_M1
-        }
-        IRETURN
-        GE()
-      }
+      | Type.SHORT => defineShortComparison(descending)
+      case Type.INT => defineIntComparison(descending)
+      case Type.FLOAT => defineFloatComparison(descending)
+      case Type.DOUBLE => defineDoubleComparison(descending)
+      case Type.LONG => defineLongComparison(descending)
       case Type.ARRAY => {
         throw new UnsupportedOperationException
       }
-      case Type.OBJECT => {
-        DUP2
-        ASTORE(4)
-        ASTORE(3)
-        val NE = new Label
-        IF_ACMPNE(NE)
-        ICONST_0
-        IRETURN
-        NE()
-        ALOAD(3)
-        val NONNULL3 = new Label
-        IFNONNULL(NONNULL3)
-        ICONST_M1
-        IRETURN
-        NONNULL3()
-        ALOAD(4)
-        val NONNULL4 = new Label
-        IFNONNULL(NONNULL4)
-        ICONST_1
-        IRETURN
-        NONNULL4()
-        ALOAD(3)
-        CHECKCAST("java/lang/Comparable")
-        ALOAD(4)
-        INVOKEINTERFACE("java/lang/Comparable",
-                        "compareTo",
-                        "(Ljava/lang/Object;)I")
-        DUP
-        val EQ = new Label
-        IFEQ(EQ)
-        if (descending) {
-          INEG
-        }
-        IRETURN
-        EQ()
-        POP
-      }
+      case Type.OBJECT => defineObjectComparison(descending)
     }
+  }
 
+  private[this] final def defineShortComparison(descending: Boolean) {
+    ISUB
+    DUP
+    val EQ = new Label
+    IFEQ(EQ)
+    if (descending) {
+      INEG
+    }
+    IRETURN
+    EQ()
+    POP
+  }
+  
+  private[this] final def defineIntComparison(descending: Boolean) {
+    DUP2
+    val LE = new Label
+    IF_ICMPLE(LE)
+    if (descending) {
+      ICONST_M1
+    } else {
+      ICONST_1
+    }
+    IRETURN
+    LE()
+    val GE = new Label
+    IF_ICMPGE(GE)
+    if (descending) {
+      ICONST_1
+    } else {
+      ICONST_M1
+    }
+    IRETURN
+    GE()
+  }
+
+  private[this] final def defineFloatComparison(descending: Boolean) {
+    DUP2
+    FCMPL
+    val LE = new Label
+    IFLE(LE)
+    if (descending) {
+      ICONST_M1
+    } else {
+      ICONST_1
+    }
+    IRETURN
+    LE()
+    FCMPG
+    val GE = new Label
+    IFGE(GE)
+    if (descending) {
+      ICONST_1
+    } else {
+      ICONST_M1
+    }
+    IRETURN
+    GE()
+  }
+
+  private[this] final def defineDoubleComparison(descending: Boolean) {
+    DSTORE(5)
+    DSTORE(3)
+    DLOAD(3)
+    DLOAD(5)
+    DCMPL
+    val LE = new Label
+    IFLE(LE)
+    if (descending) {
+      ICONST_1
+    } else {
+      ICONST_M1
+    }
+    IRETURN
+    LE()
+    DLOAD(3)
+    DLOAD(5)
+    DCMPG
+    val GE = new Label
+    IFGE(GE)
+    if (descending) {
+      ICONST_1
+    } else {
+      ICONST_M1
+    }
+    IRETURN
+    GE()
+  }
+
+  private[this] final def defineLongComparison(descending: Boolean) {
+    LSTORE(5)
+    LSTORE(3)
+    LLOAD(3)
+    LLOAD(5)
+    LCMP
+    val LE = new Label
+    IFLE(LE)
+    if (descending) {
+      ICONST_M1
+    } else {
+      ICONST_1
+    }
+    IRETURN
+    LE()
+    LLOAD(3)
+    LLOAD(5)
+    LCMP
+    val GE = new Label
+    IFGE(GE)
+    if (descending) {
+      ICONST_1
+    } else {
+      ICONST_M1
+    }
+    IRETURN
+    GE()
+  }
+
+  private[this] final def defineObjectComparison(descending: Boolean) {
+    DUP2
+    ASTORE(4)
+    ASTORE(3)
+    val NE = new Label
+    IF_ACMPNE(NE)
+    ICONST_0
+    IRETURN
+    NE()
+    ALOAD(3)
+    val NONNULL3 = new Label
+    IFNONNULL(NONNULL3)
+    if (descending) {
+      ICONST_1
+    } else {
+      ICONST_M1
+    }
+    IRETURN
+    NONNULL3()
+    ALOAD(4)
+    val NONNULL4 = new Label
+    IFNONNULL(NONNULL4)
+    if (descending) {
+      ICONST_M1
+    } else {
+      ICONST_1
+    }
+    IRETURN
+    NONNULL4()
+    ALOAD(3)
+    CHECKCAST("java/lang/Comparable")
+    ALOAD(4)
+    INVOKEINTERFACE("java/lang/Comparable",
+                    "compareTo",
+                    "(Ljava/lang/Object;)I")
+    DUP
+    val EQ = new Label
+    IFEQ(EQ)
+    if (descending) {
+      INEG
+    }
+    IRETURN
+    EQ()
+    POP
   }
 }

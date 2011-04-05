@@ -424,10 +424,14 @@ trait BC[A] {
   protected[this] final def IF_ICMPLE(label: Label) = mv.visitJumpInsn(O.IF_ICMPLE, label)
   protected[this] final def INEG = mv.visitInsn(O.INEG)
   protected[this] final def INSTANCEOF(`type`: String) = mv.visitTypeInsn(O.INSTANCEOF, `type`)
-  protected[this] final def INVOKEINTERFACE(owner: String, name: String, desc: String) = mv.visitMethodInsn(O.INVOKEINTERFACE, owner, name, desc)
-  protected[this] final def INVOKESPECIAL(owner: String, name: String, desc: String) = mv.visitMethodInsn(O.INVOKESPECIAL, owner, name, desc)
-  protected[this] final def INVOKESTATIC(owner: String, name: String, desc: String) = mv.visitMethodInsn(O.INVOKESTATIC, owner, name, desc)
-  protected[this] final def INVOKEVIRTUAL(owner: String, name: String, desc: String) = mv.visitMethodInsn(O.INVOKEVIRTUAL, owner, name, desc)
+  protected[this] final def INVOKEINTERFACE(owner: String, name: String, desc: String) =
+    mv.visitMethodInsn(O.INVOKEINTERFACE, owner, name, desc)
+  protected[this] final def INVOKESPECIAL(owner: String, name: String, desc: String) =
+    mv.visitMethodInsn(O.INVOKESPECIAL, owner, name, desc)
+  protected[this] final def INVOKESTATIC(owner: String, name: String, desc: String) =
+    mv.visitMethodInsn(O.INVOKESTATIC, owner, name, desc)
+  protected[this] final def INVOKEVIRTUAL(owner: String, name: String, desc: String) =
+    mv.visitMethodInsn(O.INVOKEVIRTUAL, owner, name, desc)
   protected[this] final def IRETURN = mv.visitInsn(O.IRETURN)
   protected[this] final def ISUB = mv.visitInsn(O.ISUB)
   protected[this] final def LCMP = mv.visitInsn(O.LCMP)

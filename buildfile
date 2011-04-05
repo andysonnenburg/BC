@@ -153,7 +153,7 @@ class Buildr::Project
   include CopyDependencies
 end
 
-VERSION_NUMBER = '1.0.0'
+VERSION_NUMBER = '1.0.1'
 GROUP = 'com.github.sonyandy'
 COPYRIGHT = ''
 

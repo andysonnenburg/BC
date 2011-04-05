@@ -65,5 +65,26 @@ object BeanComparatorClassSpec extends Specification {
       beanComparator.compare(x, y) must beGreaterThan(0)
       beanComparator.compare(y, x) must beLessThan(0)
     }
+
+    "create a descending Comparator class on the string property of Bean" in {
+      val beanClass = classOf[Bean]
+      val fields = Array(new BeanComparatorClass.Field("string", true))
+      val beanComparatorClass = new BeanComparatorClass[Bean](beanClass, fields)
+      val beanComparator = beanComparatorClass.newInstance
+      val x = new Bean
+      val y = new Bean
+      beanComparator.compare(x, y) must_== 0
+      beanComparator.compare(y, x) must_== 0
+      x.string = "1"
+      beanComparator.compare(x, y) must beLessThan(0)
+      beanComparator.compare(y, x) must beGreaterThan(0)
+      y.string = "2"
+      beanComparator.compare(x, y) must beGreaterThan(0)
+      beanComparator.compare(y, x) must beLessThan(0)
+      x.string = Byte.MaxValue.toString
+      y.string = Byte.MinValue.toString
+      beanComparator.compare(x, y) must beLessThan(0)
+      beanComparator.compare(y, x) must beGreaterThan(0)
+    }
   }
 }
