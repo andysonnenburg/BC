@@ -1,5 +1,9 @@
-ENV['JAVA_HOME'] = '/usr/lib/jvm/default-java'
-ENV['SCALA_HOME'] = '/home/andy/Development/scala/dists/latest'
+if not ENV.has_key? 'JAVA_HOME'
+  ENV['JAVA_HOME'] = '/usr/lib/jvm/default-java'
+end
+if not ENV.has_key? 'SCALA_HOME'
+  ENV['SCALA_HOME'] = '../scala/dists/latest'
+end
 Buildr.settings.build['scala.version'] = '2.8.0'
 
 require 'buildr/scala'
